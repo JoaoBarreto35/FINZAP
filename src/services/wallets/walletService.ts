@@ -1,5 +1,9 @@
 import { supabase } from "../supabase/client";
-import type { CreateWalletInput, Wallet } from "../../types/finance";
+import type {
+  CreateWalletInput,
+  UpdateWalletInput,
+  Wallet,
+} from "../../types/finance";
 
 const walletFields =
   "id, workspace_id, name, type, owner_user_id, closing_day, due_day, active, created_at, updated_at";
@@ -26,12 +30,36 @@ export async function createWallet(input: CreateWalletInput): Promise<Wallet> {
     .from("wallets")
     .insert({
       workspace_id: input.workspace_id,
-      name: input.name,
+      name: input.name.trim(),
       type: input.type,
       owner_user_id: input.owner_user_id ?? null,
       closing_day: input.closing_day ?? null,
       due_day: input.due_day ?? null,
     })
+    .select(walletFields)
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+export async function updateWallet(
+  walletId: string,
+  input: UpdateWalletInput,
+): Promise<Wallet> {
+  const { data, error } = await supabase
+    .from("wallets")
+    .update({
+      name: input.name.trim(),
+      type: input.type,
+      owner_user_id: input.owner_user_id ?? null,
+      closing_day: input.type === "credit_card" ? input.closing_day ?? null : null,
+      due_day: input.type === "credit_card" ? input.due_day ?? null : null,
+    })
+    .eq("id", walletId)
     .select(walletFields)
     .single();
 

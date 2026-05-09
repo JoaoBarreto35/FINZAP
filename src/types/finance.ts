@@ -126,3 +126,16 @@ export type CreateTransactionInput = {
   transaction_type?: TransactionType;
   status?: TransactionStatus;
 };
+export type UpdateWalletInput = {
+  name: string;
+  type: WalletType;
+  owner_user_id?: string | null;
+  closing_day?: number | null;
+  due_day?: number | null;
+};
+
+export type UpdateCategoryInput = {
+  name: string;
+  color?: string | null;
+  icon?: string | null;
+};

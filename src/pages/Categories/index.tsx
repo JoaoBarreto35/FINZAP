@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Tag, Trash2 } from "lucide-react";
+import { Edit3, Plus, Tag, Trash2, X } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { useWorkspace } from "../../hooks/useWorkspace";
@@ -8,6 +8,7 @@ import {
   createCategory,
   deactivateCategory,
   listCategories,
+  updateCategory,
 } from "../../services/categories/categoryService";
 import type { Category } from "../../types/finance";
 import styles from "./styles.module.css";
@@ -37,6 +38,8 @@ export default function Categories() {
   const { activeWorkspace } = useWorkspace();
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+
   const [name, setName] = useState("");
   const [color, setColor] = useState(defaultColors[0]);
   const [icon, setIcon] = useState("tag");
@@ -46,6 +49,7 @@ export default function Categories() {
   const [creatingSuggestion, setCreatingSuggestion] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const isEditing = Boolean(editingCategory);
   const categoryCount = useMemo(() => categories.length, [categories]);
 
   async function loadCategories() {
@@ -73,11 +77,26 @@ export default function Categories() {
     loadCategories();
   }, [activeWorkspace?.id]);
 
-  async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
+  function resetForm() {
+    setEditingCategory(null);
+    setName("");
+    setColor(defaultColors[0]);
+    setIcon("tag");
+  }
+
+  function handleStartEdit(category: Category) {
+    setEditingCategory(category);
+    setName(category.name);
+    setColor(category.color ?? defaultColors[0]);
+    setIcon(category.icon ?? "tag");
+    setErrorMessage("");
+  }
+
+  async function handleSubmitCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!activeWorkspace) {
-      setErrorMessage("Selecione um workspace antes de criar uma categoria.");
+      setErrorMessage("Selecione um workspace antes de salvar uma categoria.");
       return;
     }
 
@@ -85,21 +104,26 @@ export default function Categories() {
     setErrorMessage("");
 
     try {
-      await createCategory({
-        workspace_id: activeWorkspace.id,
-        name,
-        color,
-        icon,
-      });
+      if (editingCategory) {
+        await updateCategory(editingCategory.id, {
+          name,
+          color,
+          icon,
+        });
+      } else {
+        await createCategory({
+          workspace_id: activeWorkspace.id,
+          name,
+          color,
+          icon,
+        });
+      }
 
-      setName("");
-      setColor(defaultColors[0]);
-      setIcon("tag");
-
+      resetForm();
       await loadCategories();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Erro ao criar categoria.";
+        error instanceof Error ? error.message : "Erro ao salvar categoria.";
       setErrorMessage(message);
     } finally {
       setSubmitting(false);
@@ -140,6 +164,11 @@ export default function Categories() {
 
     try {
       await deactivateCategory(categoryId);
+
+      if (editingCategory?.id === categoryId) {
+        resetForm();
+      }
+
       await loadCategories();
     } catch (error) {
       const message =
@@ -189,14 +218,18 @@ export default function Categories() {
           <Card>
             <div className={styles.cardHeader}>
               <div>
-                <h3>Nova categoria</h3>
-                <p>Crie uma categoria para classificar transações.</p>
+                <h3>{isEditing ? "Editar categoria" : "Nova categoria"}</h3>
+                <p>
+                  {isEditing
+                    ? "Altere os dados da categoria selecionada."
+                    : "Crie uma categoria para classificar transações."}
+                </p>
               </div>
 
-              <Plus size={20} />
+              {isEditing ? <Edit3 size={20} /> : <Plus size={20} />}
             </div>
 
-            <form className={styles.form} onSubmit={handleCreateCategory}>
+            <form className={styles.form} onSubmit={handleSubmitCategory}>
               <label>
                 Nome
                 <input
@@ -238,39 +271,53 @@ export default function Categories() {
                 </div>
               </label>
 
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Criando..." : "Criar categoria"}
-              </Button>
+              <div className={styles.formActions}>
+                <Button type="submit" disabled={submitting}>
+                  {submitting
+                    ? "Salvando..."
+                    : isEditing
+                      ? "Salvar alterações"
+                      : "Criar categoria"}
+                </Button>
+
+                {isEditing ? (
+                  <Button type="button" variant="secondary" onClick={resetForm}>
+                    Cancelar edição
+                  </Button>
+                ) : null}
+              </div>
             </form>
           </Card>
 
-          <Card>
-            <div className={styles.cardHeader}>
-              <div>
-                <h3>Sugestões rápidas</h3>
-                <p>Crie categorias comuns com um clique.</p>
+          {!isEditing ? (
+            <Card>
+              <div className={styles.cardHeader}>
+                <div>
+                  <h3>Sugestões rápidas</h3>
+                  <p>Crie categorias comuns com um clique.</p>
+                </div>
               </div>
-            </div>
 
-            <div className={styles.suggestions}>
-              {missingSuggestedCategories.map((suggestedName) => (
-                <button
-                  key={suggestedName}
-                  type="button"
-                  onClick={() => handleCreateSuggestion(suggestedName)}
-                  disabled={creatingSuggestion === suggestedName}
-                >
-                  {creatingSuggestion === suggestedName
-                    ? "Criando..."
-                    : suggestedName}
-                </button>
-              ))}
+              <div className={styles.suggestions}>
+                {missingSuggestedCategories.map((suggestedName) => (
+                  <button
+                    key={suggestedName}
+                    type="button"
+                    onClick={() => handleCreateSuggestion(suggestedName)}
+                    disabled={creatingSuggestion === suggestedName}
+                  >
+                    {creatingSuggestion === suggestedName
+                      ? "Criando..."
+                      : suggestedName}
+                  </button>
+                ))}
 
-              {missingSuggestedCategories.length === 0 ? (
-                <p className={styles.empty}>Todas as sugestões já foram criadas.</p>
-              ) : null}
-            </div>
-          </Card>
+                {missingSuggestedCategories.length === 0 ? (
+                  <p className={styles.empty}>Todas as sugestões já foram criadas.</p>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
         </div>
 
         <Card>
@@ -307,10 +354,19 @@ export default function Categories() {
                 <button
                   className={styles.iconButton}
                   type="button"
+                  onClick={() => handleStartEdit(category)}
+                  aria-label="Editar categoria"
+                >
+                  <Edit3 size={17} />
+                </button>
+
+                <button
+                  className={styles.iconButton}
+                  type="button"
                   onClick={() => handleDeactivateCategory(category.id)}
                   aria-label="Inativar categoria"
                 >
-                  <Trash2 size={17} />
+                  {editingCategory?.id === category.id ? <X size={17} /> : <Trash2 size={17} />}
                 </button>
               </div>
             ))}

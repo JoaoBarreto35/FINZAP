@@ -1,6 +1,13 @@
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { CreditCard, Plus, Trash2, Wallet as WalletIcon } from "lucide-react";
+import {
+  CreditCard,
+  Edit3,
+  Plus,
+  Trash2,
+  Wallet as WalletIcon,
+  X,
+} from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { useWorkspace } from "../../hooks/useWorkspace";
@@ -8,6 +15,7 @@ import {
   createWallet,
   deactivateWallet,
   listWallets,
+  updateWallet,
 } from "../../services/wallets/walletService";
 import type { Wallet, WalletType } from "../../types/finance";
 import styles from "./styles.module.css";
@@ -50,6 +58,8 @@ export default function Wallets() {
   const { activeWorkspace } = useWorkspace();
 
   const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
+
   const [name, setName] = useState("");
   const [type, setType] = useState<WalletType>("credit_card");
   const [closingDay, setClosingDay] = useState("");
@@ -60,6 +70,7 @@ export default function Wallets() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const isCreditCard = type === "credit_card";
+  const isEditing = Boolean(editingWallet);
 
   const activeWalletsCount = useMemo(() => wallets.length, [wallets]);
 
@@ -88,11 +99,28 @@ export default function Wallets() {
     loadWallets();
   }, [activeWorkspace?.id]);
 
-  async function handleCreateWallet(event: FormEvent<HTMLFormElement>) {
+  function resetForm() {
+    setEditingWallet(null);
+    setName("");
+    setType("credit_card");
+    setClosingDay("");
+    setDueDay("");
+  }
+
+  function handleStartEdit(wallet: Wallet) {
+    setEditingWallet(wallet);
+    setName(wallet.name);
+    setType(wallet.type);
+    setClosingDay(wallet.closing_day ? String(wallet.closing_day) : "");
+    setDueDay(wallet.due_day ? String(wallet.due_day) : "");
+    setErrorMessage("");
+  }
+
+  async function handleSubmitWallet(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!activeWorkspace) {
-      setErrorMessage("Selecione um workspace antes de criar uma carteira.");
+      setErrorMessage("Selecione um workspace antes de salvar uma carteira.");
       return;
     }
 
@@ -100,23 +128,28 @@ export default function Wallets() {
     setErrorMessage("");
 
     try {
-      await createWallet({
-        workspace_id: activeWorkspace.id,
-        name,
-        type,
-        closing_day: isCreditCard && closingDay ? Number(closingDay) : null,
-        due_day: isCreditCard && dueDay ? Number(dueDay) : null,
-      });
+      if (editingWallet) {
+        await updateWallet(editingWallet.id, {
+          name,
+          type,
+          closing_day: isCreditCard && closingDay ? Number(closingDay) : null,
+          due_day: isCreditCard && dueDay ? Number(dueDay) : null,
+        });
+      } else {
+        await createWallet({
+          workspace_id: activeWorkspace.id,
+          name,
+          type,
+          closing_day: isCreditCard && closingDay ? Number(closingDay) : null,
+          due_day: isCreditCard && dueDay ? Number(dueDay) : null,
+        });
+      }
 
-      setName("");
-      setType("credit_card");
-      setClosingDay("");
-      setDueDay("");
-
+      resetForm();
       await loadWallets();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Erro ao criar carteira.";
+        error instanceof Error ? error.message : "Erro ao salvar carteira.";
       setErrorMessage(message);
     } finally {
       setSubmitting(false);
@@ -130,6 +163,11 @@ export default function Wallets() {
 
     try {
       await deactivateWallet(walletId);
+
+      if (editingWallet?.id === walletId) {
+        resetForm();
+      }
+
       await loadWallets();
     } catch (error) {
       const message =
@@ -171,14 +209,18 @@ export default function Wallets() {
         <Card>
           <div className={styles.cardHeader}>
             <div>
-              <h3>Nova carteira</h3>
-              <p>Crie uma carteira para lançar despesas.</p>
+              <h3>{isEditing ? "Editar carteira" : "Nova carteira"}</h3>
+              <p>
+                {isEditing
+                  ? "Altere os dados da carteira selecionada."
+                  : "Crie uma carteira para lançar despesas."}
+              </p>
             </div>
 
-            <Plus size={20} />
+            {isEditing ? <Edit3 size={20} /> : <Plus size={20} />}
           </div>
 
-          <form className={styles.form} onSubmit={handleCreateWallet}>
+          <form className={styles.form} onSubmit={handleSubmitWallet}>
             <label>
               Nome
               <input
@@ -232,9 +274,21 @@ export default function Wallets() {
               </div>
             ) : null}
 
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Criando..." : "Criar carteira"}
-            </Button>
+            <div className={styles.formActions}>
+              <Button type="submit" disabled={submitting}>
+                {submitting
+                  ? "Salvando..."
+                  : isEditing
+                    ? "Salvar alterações"
+                    : "Criar carteira"}
+              </Button>
+
+              {isEditing ? (
+                <Button type="button" variant="secondary" onClick={resetForm}>
+                  Cancelar edição
+                </Button>
+              ) : null}
+            </div>
           </form>
         </Card>
 
@@ -276,10 +330,19 @@ export default function Wallets() {
                 <button
                   className={styles.iconButton}
                   type="button"
+                  onClick={() => handleStartEdit(wallet)}
+                  aria-label="Editar carteira"
+                >
+                  <Edit3 size={17} />
+                </button>
+
+                <button
+                  className={styles.iconButton}
+                  type="button"
                   onClick={() => handleDeactivateWallet(wallet.id)}
                   aria-label="Inativar carteira"
                 >
-                  <Trash2 size={17} />
+                  {editingWallet?.id === wallet.id ? <X size={17} /> : <Trash2 size={17} />}
                 </button>
               </div>
             ))}
