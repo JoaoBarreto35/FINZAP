@@ -1,10 +1,494 @@
+import type { FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Calendar,
+  CheckCircle2,
+  Plus,
+  ReceiptText,
+  Trash2,
+  Wallet as WalletIcon,
+} from "lucide-react";
+import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { useAuth } from "../../hooks/useAuth";
+import { useWorkspace } from "../../hooks/useWorkspace";
+import { listCategories } from "../../services/categories/categoryService";
+import {
+  cancelTransaction,
+  createTransaction,
+  listTransactions,
+  markTransactionAsPaid,
+} from "../../services/transactions/transactionService";
+import { listWallets } from "../../services/wallets/walletService";
+import type {
+  Category,
+  Transaction,
+  TransactionStatus,
+  Wallet,
+} from "../../types/finance";
+import { formatCurrency } from "../../utils/formatCurrency";
+import { formatDate } from "../../utils/formatDate";
+import { parseCurrencyToNumber } from "../../utils/parseCurrency";
+import styles from "./styles.module.css";
+
+const statusOptions: Array<{
+  value: TransactionStatus;
+  label: string;
+}> = [
+    {
+      value: "pending",
+      label: "Pendente",
+    },
+    {
+      value: "confirmed",
+      label: "Confirmado",
+    },
+    {
+      value: "paid",
+      label: "Pago",
+    },
+  ];
+
+function getStatusLabel(status: TransactionStatus) {
+  const labels: Record<TransactionStatus, string> = {
+    pending: "Pendente",
+    confirmed: "Confirmado",
+    paid: "Pago",
+    cancelled: "Cancelado",
+    refunded: "Estornado",
+  };
+
+  return labels[status];
+}
+
+function getTodayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function Transactions() {
+  const { user } = useAuth();
+  const { activeWorkspace } = useWorkspace();
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [transactionDate, setTransactionDate] = useState(getTodayDate());
+  const [walletId, setWalletId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [status, setStatus] = useState<TransactionStatus>("pending");
+
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const walletsById = useMemo(() => {
+    return new Map(wallets.map((wallet) => [wallet.id, wallet]));
+  }, [wallets]);
+
+  const categoriesById = useMemo(() => {
+    return new Map(categories.map((category) => [category.id, category]));
+  }, [categories]);
+
+  const totalAmount = useMemo(() => {
+    return transactions
+      .filter((transaction) => transaction.status !== "cancelled")
+      .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  }, [transactions]);
+
+  const pendingAmount = useMemo(() => {
+    return transactions
+      .filter((transaction) => transaction.status === "pending")
+      .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  }, [transactions]);
+
+  const paidAmount = useMemo(() => {
+    return transactions
+      .filter((transaction) => transaction.status === "paid")
+      .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  }, [transactions]);
+
+  async function loadPageData() {
+    if (!activeWorkspace) {
+      setTransactions([]);
+      setWallets([]);
+      setCategories([]);
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage("");
+
+    try {
+      const [transactionsData, walletsData, categoriesData] = await Promise.all([
+        listTransactions(activeWorkspace.id),
+        listWallets(activeWorkspace.id),
+        listCategories(activeWorkspace.id),
+      ]);
+
+      setTransactions(transactionsData);
+      setWallets(walletsData);
+      setCategories(categoriesData);
+
+      if (!walletId && walletsData[0]) {
+        setWalletId(walletsData[0].id);
+      }
+
+      if (!categoryId && categoriesData[0]) {
+        setCategoryId(categoriesData[0].id);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao carregar transações.";
+      setErrorMessage(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPageData();
+  }, [activeWorkspace?.id]);
+
+  async function handleCreateTransaction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!activeWorkspace) {
+      setErrorMessage("Selecione um workspace antes de criar transações.");
+      return;
+    }
+
+    if (!user) {
+      setErrorMessage("Usuário não autenticado.");
+      return;
+    }
+
+    const parsedAmount = parseCurrencyToNumber(amount);
+
+    if (parsedAmount <= 0) {
+      setErrorMessage("Informe um valor válido para a transação.");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      await createTransaction(
+        {
+          workspace_id: activeWorkspace.id,
+          wallet_id: walletId || null,
+          category_id: categoryId || null,
+          amount: parsedAmount,
+          description,
+          transaction_date: transactionDate,
+          transaction_type: "single",
+          status,
+        },
+        user.id,
+      );
+
+      setDescription("");
+      setAmount("");
+      setTransactionDate(getTodayDate());
+      setStatus("pending");
+
+      await loadPageData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao criar transação.";
+      setErrorMessage(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleMarkAsPaid(transactionId: string) {
+    setActionLoadingId(transactionId);
+    setErrorMessage("");
+
+    try {
+      await markTransactionAsPaid(transactionId);
+      await loadPageData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao marcar como pago.";
+      setErrorMessage(message);
+    } finally {
+      setActionLoadingId("");
+    }
+  }
+
+  async function handleCancelTransaction(transactionId: string) {
+    const confirmed = window.confirm("Deseja realmente cancelar esta transação?");
+
+    if (!confirmed) return;
+
+    setActionLoadingId(transactionId);
+    setErrorMessage("");
+
+    try {
+      await cancelTransaction(transactionId);
+      await loadPageData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao cancelar transação.";
+      setErrorMessage(message);
+    } finally {
+      setActionLoadingId("");
+    }
+  }
+
+  if (!activeWorkspace) {
+    return (
+      <Card>
+        <h2>Nenhum workspace selecionado</h2>
+        <p>Crie ou selecione um workspace antes de cadastrar transações.</p>
+      </Card>
+    );
+  }
+
   return (
-    <Card>
-      <h2>Transações</h2>
-      <p>Lista de gastos avulsos, parcelados e fixos do workspace.</p>
-    </Card>
+    <div className={styles.page}>
+      <section className={styles.header}>
+        <div>
+          <span className={styles.eyebrow}>Transações</span>
+          <h2>Gastos do workspace</h2>
+          <p>
+            Lance gastos avulsos, acompanhe pendências e marque despesas como
+            pagas.
+          </p>
+        </div>
+      </section>
+
+      {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
+
+      <div className={styles.summaryGrid}>
+        <Card>
+          <span className={styles.summaryLabel}>Total lançado</span>
+          <strong className={styles.summaryValue}>{formatCurrency(totalAmount)}</strong>
+        </Card>
+
+        <Card>
+          <span className={styles.summaryLabel}>Pendente</span>
+          <strong className={styles.summaryValue}>{formatCurrency(pendingAmount)}</strong>
+        </Card>
+
+        <Card>
+          <span className={styles.summaryLabel}>Pago</span>
+          <strong className={styles.summaryValue}>{formatCurrency(paidAmount)}</strong>
+        </Card>
+      </div>
+
+      <div className={styles.grid}>
+        <Card>
+          <div className={styles.cardHeader}>
+            <div>
+              <h3>Nova transação</h3>
+              <p>Crie um gasto avulso para o workspace atual.</p>
+            </div>
+
+            <Plus size={20} />
+          </div>
+
+          {wallets.length === 0 || categories.length === 0 ? (
+            <p className={styles.warning}>
+              Cadastre pelo menos uma carteira e uma categoria antes de lançar
+              transações.
+            </p>
+          ) : null}
+
+          <form className={styles.form} onSubmit={handleCreateTransaction}>
+            <label>
+              Descrição
+              <input
+                type="text"
+                placeholder="Ex: Mercado"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                required
+              />
+            </label>
+
+            <label>
+              Valor
+              <input
+                type="text"
+                placeholder="Ex: 42,90"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                required
+              />
+            </label>
+
+            <label>
+              Data
+              <input
+                type="date"
+                value={transactionDate}
+                onChange={(event) => setTransactionDate(event.target.value)}
+                required
+              />
+            </label>
+
+            <label>
+              Carteira
+              <select
+                value={walletId}
+                onChange={(event) => setWalletId(event.target.value)}
+                required
+              >
+                <option value="">Selecione</option>
+
+                {wallets.map((wallet) => (
+                  <option key={wallet.id} value={wallet.id}>
+                    {wallet.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Categoria
+              <select
+                value={categoryId}
+                onChange={(event) => setCategoryId(event.target.value)}
+                required
+              >
+                <option value="">Selecione</option>
+
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Status
+              <select
+                value={status}
+                onChange={(event) =>
+                  setStatus(event.target.value as TransactionStatus)
+                }
+              >
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <Button
+              type="submit"
+              disabled={submitting || wallets.length === 0 || categories.length === 0}
+            >
+              {submitting ? "Criando..." : "Criar transação"}
+            </Button>
+          </form>
+        </Card>
+
+        <Card>
+          <div className={styles.cardHeader}>
+            <div>
+              <h3>Últimas transações</h3>
+              <p>Gastos lançados no workspace ativo.</p>
+            </div>
+
+            <ReceiptText size={20} />
+          </div>
+
+          {loading ? <p className={styles.empty}>Carregando transações...</p> : null}
+
+          {!loading && transactions.length === 0 ? (
+            <p className={styles.empty}>Nenhuma transação cadastrada ainda.</p>
+          ) : null}
+
+          <div className={styles.list}>
+            {transactions.map((transaction) => {
+              const wallet = transaction.wallet_id
+                ? walletsById.get(transaction.wallet_id)
+                : null;
+
+              const category = transaction.category_id
+                ? categoriesById.get(transaction.category_id)
+                : null;
+
+              const isActionLoading = actionLoadingId === transaction.id;
+              const isCancelled = transaction.status === "cancelled";
+              const isPaid = transaction.status === "paid";
+
+              return (
+                <div
+                  key={transaction.id}
+                  className={
+                    isCancelled
+                      ? `${styles.item} ${styles.cancelled}`
+                      : styles.item
+                  }
+                >
+                  <div className={styles.itemTop}>
+                    <div>
+                      <strong>{transaction.description}</strong>
+                      <span>{formatDate(transaction.transaction_date)}</span>
+                    </div>
+
+                    <strong className={styles.amount}>
+                      {formatCurrency(Number(transaction.amount))}
+                    </strong>
+                  </div>
+
+                  <div className={styles.metaGrid}>
+                    <span>
+                      <WalletIcon size={14} />
+                      {wallet?.name ?? "Sem carteira"}
+                    </span>
+
+                    <span>
+                      <ReceiptText size={14} />
+                      {category?.name ?? "Sem categoria"}
+                    </span>
+
+                    <span>
+                      <Calendar size={14} />
+                      {getStatusLabel(transaction.status)}
+                    </span>
+                  </div>
+
+                  {!isCancelled ? (
+                    <div className={styles.actions}>
+                      {!isPaid ? (
+                        <button
+                          type="button"
+                          onClick={() => handleMarkAsPaid(transaction.id)}
+                          disabled={isActionLoading}
+                        >
+                          <CheckCircle2 size={16} />
+                          Marcar pago
+                        </button>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() => handleCancelTransaction(transaction.id)}
+                        disabled={isActionLoading}
+                      >
+                        <Trash2 size={16} />
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+    </div>
   );
 }

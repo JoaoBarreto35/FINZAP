@@ -26,7 +26,7 @@ export async function createCategory(input: CreateCategoryInput): Promise<Catego
     .from("categories")
     .insert({
       workspace_id: input.workspace_id,
-      name: input.name,
+      name: input.name.trim(),
       color: input.color ?? null,
       icon: input.icon ?? null,
     })

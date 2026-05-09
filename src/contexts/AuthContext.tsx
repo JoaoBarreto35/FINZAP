@@ -106,11 +106,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
+    const currentUser = user;
     let isMounted = true;
 
     async function loadProfile() {
       try {
-        const currentProfile = await getMyProfile(user.id);
+        const currentProfile = await getMyProfile(currentUser.id);
 
         if (isMounted) {
           setProfile(currentProfile);
