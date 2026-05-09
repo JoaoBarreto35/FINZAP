@@ -93,6 +93,13 @@ export default function Transactions() {
   const [actionLoadingId, setActionLoadingId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "single" | "installment" | "recurring">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | TransactionStatus>("all");
+  const [walletFilter, setWalletFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [invoiceFilter, setInvoiceFilter] = useState("all");
+
   const isEditing = Boolean(editingTransaction);
 
 
@@ -109,23 +116,64 @@ export default function Transactions() {
     return new Map(invoices.map((invoice) => [invoice.id, invoice]));
   }, [invoices]);
 
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      const matchesSearch = transaction.description
+        .toLowerCase()
+        .includes(searchTerm.trim().toLowerCase());
+
+      const matchesType =
+        typeFilter === "all" || transaction.transaction_type === typeFilter;
+
+      const matchesStatus =
+        statusFilter === "all" || transaction.status === statusFilter;
+
+      const matchesWallet =
+        walletFilter === "all" || transaction.wallet_id === walletFilter;
+
+      const matchesCategory =
+        categoryFilter === "all" || transaction.category_id === categoryFilter;
+
+      const matchesInvoice =
+        invoiceFilter === "all" ||
+        (invoiceFilter === "none" && !transaction.invoice_id) ||
+        transaction.invoice_id === invoiceFilter;
+
+      return (
+        matchesSearch &&
+        matchesType &&
+        matchesStatus &&
+        matchesWallet &&
+        matchesCategory &&
+        matchesInvoice
+      );
+    });
+  }, [
+    transactions,
+    searchTerm,
+    typeFilter,
+    statusFilter,
+    walletFilter,
+    categoryFilter,
+    invoiceFilter,
+  ]);
   const totalAmount = useMemo(() => {
-    return transactions
+    return filteredTransactions
       .filter((transaction) => transaction.status !== "cancelled")
       .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   const pendingAmount = useMemo(() => {
-    return transactions
+    return filteredTransactions
       .filter((transaction) => transaction.status === "pending")
       .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   const paidAmount = useMemo(() => {
-    return transactions
+    return filteredTransactions
       .filter((transaction) => transaction.status === "paid")
       .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   async function loadPageData() {
     console.log("[Transactions] loadPageData chamado", {
@@ -336,8 +384,133 @@ export default function Transactions() {
       </section>
 
       {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
+      <Card>
+        <div className={styles.filtersHeader}>
+          <div>
+            <h3>Filtros</h3>
+            <p>Refine a lista de transações do workspace.</p>
+          </div>
 
+          <button
+            type="button"
+            onClick={() => {
+              setSearchTerm("");
+              setTypeFilter("all");
+              setStatusFilter("all");
+              setWalletFilter("all");
+              setCategoryFilter("all");
+              setInvoiceFilter("all");
+            }}
+          >
+            Limpar filtros
+          </button>
+        </div>
+
+        <div className={styles.filtersGrid}>
+          <label>
+            Buscar
+            <input
+              type="text"
+              placeholder="Ex: mercado, notebook..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </label>
+
+          <label>
+            Tipo
+            <select
+              value={typeFilter}
+              onChange={(event) =>
+                setTypeFilter(
+                  event.target.value as "all" | "single" | "installment" | "recurring",
+                )
+              }
+            >
+              <option value="all">Todos</option>
+              <option value="single">Avulsas</option>
+              <option value="installment">Parceladas</option>
+              <option value="recurring">Fixas</option>
+            </select>
+          </label>
+
+          <label>
+            Status
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as "all" | TransactionStatus)
+              }
+            >
+              <option value="all">Todos</option>
+              <option value="pending">Pendente</option>
+              <option value="confirmed">Confirmado</option>
+              <option value="paid">Pago</option>
+              <option value="cancelled">Cancelado</option>
+              <option value="refunded">Estornado</option>
+            </select>
+          </label>
+
+          <label>
+            Carteira
+            <select
+              value={walletFilter}
+              onChange={(event) => setWalletFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+
+              {wallets.map((wallet) => (
+                <option key={wallet.id} value={wallet.id}>
+                  {wallet.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Categoria
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Fatura
+            <select
+              value={invoiceFilter}
+              onChange={(event) => setInvoiceFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+              <option value="none">Sem fatura</option>
+
+              {invoices.map((invoice) => {
+                const wallet = walletsById.get(invoice.wallet_id);
+
+                return (
+                  <option key={invoice.id} value={invoice.id}>
+                    {wallet?.name ?? "Carteira removida"} — {String(invoice.month).padStart(2, "0")}/
+                    {invoice.year}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        </div>
+
+        <p className={styles.filterResult}>
+          Exibindo {filteredTransactions.length} de {transactions.length} transações.
+        </p>
+      </Card>
       <div className={styles.summaryGrid}>
+
         <Card>
           <span className={styles.summaryLabel}>Total lançado</span>
           <strong className={styles.summaryValue}>{formatCurrency(totalAmount)}</strong>
@@ -496,8 +669,12 @@ export default function Transactions() {
             <p className={styles.empty}>Nenhuma transação cadastrada ainda.</p>
           ) : null}
 
+          {!loading && transactions.length > 0 && filteredTransactions.length === 0 ? (
+            <p className={styles.empty}>Nenhuma transação encontrada com os filtros atuais.</p>
+          ) : null}
+
           <div className={styles.list}>
-            {transactions.map((transaction) => {
+            {filteredTransactions.map((transaction) => {
               const wallet = transaction.wallet_id
                 ? walletsById.get(transaction.wallet_id)
                 : null;
