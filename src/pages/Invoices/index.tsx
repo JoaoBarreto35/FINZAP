@@ -3,9 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CreditCard,
-  Lock,
   Plus,
+  ReceiptText,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -13,6 +15,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { useAuth } from "../../hooks/useAuth";
 import { useWorkspace } from "../../hooks/useWorkspace";
+import { listCategories } from "../../services/categories/categoryService";
 import {
   cancelInvoice,
   closeInvoice,
@@ -23,8 +26,15 @@ import {
 } from "../../services/invoices/invoiceService";
 import { listTransactions } from "../../services/transactions/transactionService";
 import { listWallets } from "../../services/wallets/walletService";
-import type { Invoice, InvoiceStatus, Transaction, Wallet } from "../../types/finance";
+import type {
+  Category,
+  Invoice,
+  InvoiceStatus,
+  Transaction,
+  Wallet,
+} from "../../types/finance";
 import { formatCurrency } from "../../utils/formatCurrency";
+import { formatDate } from "../../utils/formatDate";
 import styles from "./styles.module.css";
 
 const monthOptions = [
@@ -50,10 +60,6 @@ function getCurrentYear() {
   return new Date().getFullYear();
 }
 
-function getMonthName(month: number) {
-  return monthOptions.find((option) => option.value === month)?.label ?? String(month);
-}
-
 function getInvoiceStatusLabel(status: InvoiceStatus) {
   const labels: Record<InvoiceStatus, string> = {
     open: "Aberta",
@@ -65,6 +71,34 @@ function getInvoiceStatusLabel(status: InvoiceStatus) {
   return labels[status];
 }
 
+function getTransactionStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: "Pendente",
+    confirmed: "Confirmado",
+    paid: "Pago",
+    cancelled: "Cancelado",
+    refunded: "Estornado",
+  };
+
+  return labels[status] ?? status;
+}
+
+function getTransactionTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    single: "Avulsa",
+    installment: "Parcelada",
+    recurring: "Fixa",
+  };
+
+  return labels[type] ?? type;
+}
+
+function sumTransactions(transactions: Transaction[]) {
+  return transactions
+    .filter((transaction) => transaction.status !== "cancelled")
+    .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+}
+
 export default function Invoices() {
   const { user } = useAuth();
   const { activeWorkspace } = useWorkspace();
@@ -72,11 +106,13 @@ export default function Invoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const [walletId, setWalletId] = useState("");
   const [month, setMonth] = useState(getCurrentMonth());
   const [year, setYear] = useState(getCurrentYear());
 
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState("");
@@ -89,6 +125,18 @@ export default function Invoices() {
   const walletsById = useMemo(() => {
     return new Map(wallets.map((wallet) => [wallet.id, wallet]));
   }, [wallets]);
+
+  const categoriesById = useMemo(() => {
+    return new Map(categories.map((category) => [category.id, category]));
+  }, [categories]);
+
+  const openInvoices = useMemo(() => {
+    return invoices.filter((invoice) => invoice.status === "open");
+  }, [invoices]);
+
+  const paidInvoices = useMemo(() => {
+    return invoices.filter((invoice) => invoice.status === "paid");
+  }, [invoices]);
 
   const invoiceTotalsById = useMemo(() => {
     const totals = new Map<string, number>();
@@ -104,27 +152,30 @@ export default function Invoices() {
     return totals;
   }, [transactions]);
 
-  const totalOpenAmount = useMemo(() => {
-    return invoices
-      .filter((invoice) => invoice.status === "open")
-      .reduce((sum, invoice) => {
-        return sum + (invoiceTotalsById.get(invoice.id) ?? 0);
-      }, 0);
-  }, [invoices, invoiceTotalsById]);
+  const openInvoicesAmount = useMemo(() => {
+    return openInvoices.reduce((sum, invoice) => {
+      return sum + (invoiceTotalsById.get(invoice.id) ?? 0);
+    }, 0);
+  }, [openInvoices, invoiceTotalsById]);
 
-  const totalPaidAmount = useMemo(() => {
-    return invoices
-      .filter((invoice) => invoice.status === "paid")
-      .reduce((sum, invoice) => {
-        return sum + (invoiceTotalsById.get(invoice.id) ?? 0);
-      }, 0);
-  }, [invoices, invoiceTotalsById]);
+  const paidInvoicesAmount = useMemo(() => {
+    return paidInvoices.reduce((sum, invoice) => {
+      return sum + (invoiceTotalsById.get(invoice.id) ?? 0);
+    }, 0);
+  }, [paidInvoices, invoiceTotalsById]);
+
+  function getInvoiceTransactions(invoiceId: string) {
+    return transactions.filter((transaction) => {
+      return transaction.invoice_id === invoiceId;
+    });
+  }
 
   async function loadPageData() {
     if (!activeWorkspace) {
       setInvoices([]);
       setWallets([]);
       setTransactions([]);
+      setCategories([]);
       return;
     }
 
@@ -132,17 +183,22 @@ export default function Invoices() {
     setErrorMessage("");
 
     try {
-      const [invoicesData, walletsData, transactionsData] = await Promise.all([
-        listInvoices(activeWorkspace.id),
-        listWallets(activeWorkspace.id),
-        listTransactions(activeWorkspace.id),
-      ]);
+      const [invoicesData, walletsData, transactionsData, categoriesData] =
+        await Promise.all([
+          listInvoices(activeWorkspace.id),
+          listWallets(activeWorkspace.id),
+          listTransactions(activeWorkspace.id),
+          listCategories(activeWorkspace.id),
+        ]);
 
       setInvoices(invoicesData);
       setWallets(walletsData);
       setTransactions(transactionsData);
+      setCategories(categoriesData);
 
-      const firstCreditCard = walletsData.find((wallet) => wallet.type === "credit_card");
+      const firstCreditCard = walletsData.find(
+        (wallet) => wallet.type === "credit_card",
+      );
 
       if (!walletId && firstCreditCard) {
         setWalletId(firstCreditCard.id);
@@ -157,19 +213,26 @@ export default function Invoices() {
   }
 
   useEffect(() => {
-    loadPageData();
+    const timeoutId = window.setTimeout(() => {
+      void loadPageData();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
 
   async function handleCreateInvoice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!activeWorkspace) {
-      setErrorMessage("Selecione um workspace antes de criar faturas.");
+      setErrorMessage("Selecione um workspace antes de criar uma fatura.");
       return;
     }
 
     if (!walletId) {
-      setErrorMessage("Selecione uma carteira de crédito.");
+      setErrorMessage("Selecione um cartão de crédito.");
       return;
     }
 
@@ -183,9 +246,6 @@ export default function Invoices() {
         month,
         year,
       });
-
-      setMonth(getCurrentMonth());
-      setYear(getCurrentYear());
 
       await loadPageData();
     } catch (error) {
@@ -274,7 +334,7 @@ export default function Invoices() {
     return (
       <Card>
         <h2>Nenhum workspace selecionado</h2>
-        <p>Crie ou selecione um workspace antes de cadastrar faturas.</p>
+        <p>Crie ou selecione um workspace antes de visualizar faturas.</p>
       </Card>
     );
   }
@@ -286,8 +346,8 @@ export default function Invoices() {
           <span className={styles.eyebrow}>Faturas</span>
           <h2>Faturas do workspace</h2>
           <p>
-            Controle faturas de cartões de crédito. Em breve as transações serão
-            vinculadas automaticamente pela data de compra e fechamento.
+            Gerencie faturas de cartões de crédito, visualize totais e confira
+            as transações vinculadas.
           </p>
         </div>
       </section>
@@ -297,19 +357,14 @@ export default function Invoices() {
       <div className={styles.summaryGrid}>
         <Card>
           <span className={styles.summaryLabel}>Faturas abertas</span>
-          <strong className={styles.summaryValue}>
-            {invoices.filter((invoice) => invoice.status === "open").length}
-          </strong>
+          <strong className={styles.summaryValue}>{openInvoices.length}</strong>
+          <small>{formatCurrency(openInvoicesAmount)} em aberto</small>
         </Card>
 
         <Card>
-          <span className={styles.summaryLabel}>Total aberto</span>
-          <strong className={styles.summaryValue}>{formatCurrency(totalOpenAmount)}</strong>
-        </Card>
-
-        <Card>
-          <span className={styles.summaryLabel}>Total pago</span>
-          <strong className={styles.summaryValue}>{formatCurrency(totalPaidAmount)}</strong>
+          <span className={styles.summaryLabel}>Faturas pagas</span>
+          <strong className={styles.summaryValue}>{paidInvoices.length}</strong>
+          <small>{formatCurrency(paidInvoicesAmount)} já pago</small>
         </Card>
       </div>
 
@@ -317,8 +372,11 @@ export default function Invoices() {
         <Card>
           <div className={styles.cardHeader}>
             <div>
-              <h3>Nova fatura</h3>
-              <p>Crie uma fatura mensal para uma carteira de crédito.</p>
+              <h3>Nova fatura manual</h3>
+              <p>
+                Normalmente as faturas são criadas automaticamente ao lançar
+                gastos no cartão.
+              </p>
             </div>
 
             <Plus size={20} />
@@ -333,7 +391,7 @@ export default function Invoices() {
 
           <form className={styles.form} onSubmit={handleCreateInvoice}>
             <label>
-              Carteira
+              Cartão
               <select
                 value={walletId}
                 onChange={(event) => setWalletId(event.target.value)}
@@ -375,7 +433,10 @@ export default function Invoices() {
               />
             </label>
 
-            <Button type="submit" disabled={submitting || creditCardWallets.length === 0}>
+            <Button
+              type="submit"
+              disabled={submitting || creditCardWallets.length === 0}
+            >
               {submitting ? "Criando..." : "Criar fatura"}
             </Button>
           </form>
@@ -385,10 +446,10 @@ export default function Invoices() {
           <div className={styles.cardHeader}>
             <div>
               <h3>Faturas cadastradas</h3>
-              <p>Faturas abertas, fechadas, pagas e canceladas.</p>
+              <p>Abra uma fatura para conferir os lançamentos vinculados.</p>
             </div>
 
-            <CreditCard size={20} />
+            <CalendarDays size={20} />
           </div>
 
           {loading ? <p className={styles.empty}>Carregando faturas...</p> : null}
@@ -400,62 +461,76 @@ export default function Invoices() {
           <div className={styles.list}>
             {invoices.map((invoice) => {
               const wallet = walletsById.get(invoice.wallet_id);
-              const total = invoiceTotalsById.get(invoice.id) ?? 0;
-              const isActionLoading = actionLoadingId === invoice.id;
-              const isCancelled = invoice.status === "cancelled";
-              const isPaid = invoice.status === "paid";
+              const invoiceTransactions = getInvoiceTransactions(invoice.id);
+              const invoiceTotal = sumTransactions(invoiceTransactions);
+
+              const isExpanded = expandedInvoiceId === invoice.id;
+              const isOpen = invoice.status === "open";
               const isClosed = invoice.status === "closed";
+              const isPaid = invoice.status === "paid";
+              const isCancelled = invoice.status === "cancelled";
+              const isActionLoading = actionLoadingId === invoice.id;
 
               return (
                 <div
                   key={invoice.id}
                   className={
                     isCancelled
-                      ? `${styles.item} ${styles.cancelled}`
-                      : styles.item
+                      ? `${styles.invoiceItem} ${styles.cancelled}`
+                      : styles.invoiceItem
                   }
                 >
-                  <div className={styles.itemTop}>
-                    <div>
-                      <strong>
-                        {wallet?.name ?? "Carteira removida"} —{" "}
-                        {getMonthName(invoice.month)}/{invoice.year}
-                      </strong>
+                  <div className={styles.invoiceTop}>
+                    <div className={styles.invoiceTitle}>
+                      <CreditCard size={18} />
 
-                      <span>{getInvoiceStatusLabel(invoice.status)}</span>
+                      <div>
+                        <strong>
+                          {wallet?.name ?? "Carteira removida"} ·{" "}
+                          {String(invoice.month).padStart(2, "0")}/{invoice.year}
+                        </strong>
+
+                        <span>
+                          {invoiceTransactions.length} transação(ões) · Status:{" "}
+                          {getInvoiceStatusLabel(invoice.status)}
+                        </span>
+                      </div>
                     </div>
 
-                    <strong className={styles.amount}>
-                      {formatCurrency(total)}
+                    <strong className={styles.invoiceAmount}>
+                      {formatCurrency(invoiceTotal)}
                     </strong>
                   </div>
 
-                  <div className={styles.metaGrid}>
-                    <span>
-                      <CalendarDays size={14} />
-                      {getMonthName(invoice.month)} de {invoice.year}
-                    </span>
+                  <div className={styles.invoiceActions}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedInvoiceId(isExpanded ? "" : invoice.id)
+                      }
+                      disabled={isActionLoading}
+                    >
+                      {isExpanded ? (
+                        <ChevronUp size={16} />
+                      ) : (
+                        <ChevronDown size={16} />
+                      )}
+                      {isExpanded ? "Ocultar detalhes" : "Ver detalhes"}
+                    </button>
 
-                    <span>
-                      <CreditCard size={14} />
-                      {wallet?.name ?? "Sem carteira"}
-                    </span>
-                  </div>
+                    {isOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => handleCloseInvoice(invoice.id)}
+                        disabled={isActionLoading}
+                      >
+                        <ReceiptText size={16} />
+                        Fechar
+                      </button>
+                    ) : null}
 
-                  {!isCancelled ? (
-                    <div className={styles.actions}>
-                      {invoice.status === "open" ? (
-                        <button
-                          type="button"
-                          onClick={() => handleCloseInvoice(invoice.id)}
-                          disabled={isActionLoading}
-                        >
-                          <Lock size={16} />
-                          Fechar
-                        </button>
-                      ) : null}
-
-                      {isClosed ? (
+                    {isClosed ? (
+                      <>
                         <button
                           type="button"
                           onClick={() => handleReopenInvoice(invoice.id)}
@@ -464,9 +539,7 @@ export default function Invoices() {
                           <RotateCcw size={16} />
                           Reabrir
                         </button>
-                      ) : null}
 
-                      {!isPaid ? (
                         <button
                           type="button"
                           onClick={() => handleMarkAsPaid(invoice.id)}
@@ -475,8 +548,21 @@ export default function Invoices() {
                           <CheckCircle2 size={16} />
                           Marcar paga
                         </button>
-                      ) : null}
+                      </>
+                    ) : null}
 
+                    {isPaid ? (
+                      <button
+                        type="button"
+                        onClick={() => handleReopenInvoice(invoice.id)}
+                        disabled={isActionLoading}
+                      >
+                        <RotateCcw size={16} />
+                        Reabrir
+                      </button>
+                    ) : null}
+
+                    {!isCancelled && !isPaid ? (
                       <button
                         type="button"
                         onClick={() => handleCancelInvoice(invoice.id)}
@@ -485,6 +571,60 @@ export default function Invoices() {
                         <Trash2 size={16} />
                         Cancelar
                       </button>
+                    ) : null}
+                  </div>
+
+                  {isExpanded ? (
+                    <div className={styles.invoiceDetails}>
+                      <div className={styles.detailsHeader}>
+                        <h4>Transações da fatura</h4>
+                        <span>{invoiceTransactions.length} item(ns)</span>
+                      </div>
+
+                      {invoiceTransactions.length === 0 ? (
+                        <p className={styles.empty}>
+                          Nenhuma transação vinculada a esta fatura.
+                        </p>
+                      ) : null}
+
+                      <div className={styles.transactionList}>
+                        {invoiceTransactions.map((transaction) => {
+                          const category = transaction.category_id
+                            ? categoriesById.get(transaction.category_id)
+                            : null;
+
+                          return (
+                            <div
+                              key={transaction.id}
+                              className={
+                                transaction.status === "cancelled"
+                                  ? `${styles.transactionItem} ${styles.cancelled}`
+                                  : styles.transactionItem
+                              }
+                            >
+                              <div>
+                                <strong>{transaction.description}</strong>
+                                <span>
+                                  {formatDate(transaction.transaction_date)} ·{" "}
+                                  {category?.name ?? "Sem categoria"} ·{" "}
+                                  {getTransactionTypeLabel(
+                                    transaction.transaction_type,
+                                  )}
+                                </span>
+                              </div>
+
+                              <div className={styles.transactionRight}>
+                                <strong>
+                                  {formatCurrency(Number(transaction.amount))}
+                                </strong>
+                                <span>
+                                  {getTransactionStatusLabel(transaction.status)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   ) : null}
                 </div>
