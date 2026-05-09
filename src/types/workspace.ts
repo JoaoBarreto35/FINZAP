@@ -37,3 +37,17 @@ export type WorkspaceContextValue = {
   selectWorkspace: (workspaceId: string) => void;
   refreshWorkspaces: () => Promise<void>;
 };
+
+export type WorkspaceMemberWithProfile = WorkspaceMember & {
+  profile: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  } | null;
+};
+
+export type AddWorkspaceMemberInput = {
+  workspace_id: string;
+  email: string;
+  role: Exclude<WorkspaceMemberRole, "owner">;
+};

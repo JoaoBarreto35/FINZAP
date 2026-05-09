@@ -12,6 +12,7 @@ import {
   Wallet,
   ListOrdered,
   Repeat,
+  LineChart,
 } from "lucide-react";
 import { useAuth } from "../../../hooks/useAuth";
 import { useWorkspace } from "../../../hooks/useWorkspace";
@@ -22,6 +23,11 @@ const navItems = [
     label: "Dashboard",
     path: "/app/dashboard",
     icon: Home,
+  },
+  {
+    label: "Previsão",
+    path: "/app/forecast",
+    icon: LineChart,
   },
   {
     label: "Transações",

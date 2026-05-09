@@ -14,6 +14,7 @@ import WorkspaceSelect from "../pages/WorkspaceSelect";
 import Installments from "../pages/Installments";
 import { ProtectedRoute } from "./ProtectedRoute";
 import Recurring from '../pages/Recurring';
+import Forecast from '../pages/Forecast';
 
 export function AppRoutes() {
   return (
@@ -30,6 +31,7 @@ export function AppRoutes() {
           <Route path="workspaces" element={<WorkspaceSelect />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="installments" element={<Installments />} />
+          <Route path="forecast" element={<Forecast />} />
           <Route path="invoices" element={<Invoices />} />
           <Route path="wallets" element={<Wallets />} />
           <Route path="categories" element={<Categories />} />
