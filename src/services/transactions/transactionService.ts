@@ -25,41 +25,29 @@ export async function listTransactions(workspaceId: string): Promise<Transaction
 
 export async function createTransaction(
   input: CreateTransactionInput,
-  createdBy: string,
+  _createdBy: string,
 ): Promise<Transaction> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .insert({
-      workspace_id: input.workspace_id,
-      wallet_id: input.wallet_id ?? null,
-      invoice_id: input.invoice_id ?? null,
-      category_id: input.category_id ?? null,
-      created_by: createdBy,
-      responsible_user_id: input.responsible_user_id ?? null,
-      amount: input.amount,
-      description: input.description,
-      transaction_date: input.transaction_date,
-      transaction_type: input.transaction_type ?? "single",
-      status: input.status ?? "pending",
-      source: "web",
-    })
-    .select(transactionFields)
-    .single();
+  const { data, error } = await supabase.rpc("create_transaction_with_invoice", {
+    p_workspace_id: input.workspace_id,
+    p_wallet_id: input.wallet_id ?? null,
+    p_category_id: input.category_id ?? null,
+    p_responsible_user_id: input.responsible_user_id ?? null,
+    p_amount: input.amount,
+    p_description: input.description,
+    p_transaction_date: input.transaction_date,
+    p_transaction_type: input.transaction_type ?? "single",
+    p_status: input.status ?? "pending",
+  });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  await createTransactionEvent({
-    workspace_id: data.workspace_id,
-    transaction_id: data.id,
-    user_id: createdBy,
-    event_type: "transaction_created",
-    new_data: data,
-    description: "Transação criada pelo painel web.",
-  });
+  if (!data) {
+    throw new Error("Não foi possível criar a transação.");
+  }
 
-  return data;
+  return data as Transaction;
 }
 
 export async function markTransactionAsPaid(transactionId: string): Promise<void> {
@@ -85,31 +73,5 @@ export async function cancelTransaction(transactionId: string): Promise<void> {
 
   if (error) {
     throw new Error(error.message);
-  }
-}
-
-type CreateTransactionEventInput = {
-  workspace_id: string;
-  transaction_id: string;
-  user_id: string;
-  event_type: string;
-  old_data?: Record<string, unknown> | null;
-  new_data?: Record<string, unknown> | null;
-  description?: string;
-};
-
-async function createTransactionEvent(input: CreateTransactionEventInput): Promise<void> {
-  const { error } = await supabase.from("transaction_events").insert({
-    workspace_id: input.workspace_id,
-    transaction_id: input.transaction_id,
-    user_id: input.user_id,
-    event_type: input.event_type,
-    old_data: input.old_data ?? null,
-    new_data: input.new_data ?? null,
-    description: input.description ?? null,
-  });
-
-  if (error) {
-    console.error("Erro ao criar evento da transação:", error.message);
   }
 }

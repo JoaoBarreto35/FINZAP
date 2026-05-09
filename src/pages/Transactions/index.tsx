@@ -1,8 +1,10 @@
+
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Calendar,
   CheckCircle2,
+  CreditCard,
   Plus,
   ReceiptText,
   Trash2,
@@ -19,9 +21,11 @@ import {
   listTransactions,
   markTransactionAsPaid,
 } from "../../services/transactions/transactionService";
+import { listInvoices } from "../../services/invoices/invoiceService";
 import { listWallets } from "../../services/wallets/walletService";
 import type {
   Category,
+  Invoice,
   Transaction,
   TransactionStatus,
   Wallet,
@@ -72,6 +76,7 @@ export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -85,6 +90,8 @@ export default function Transactions() {
   const [actionLoadingId, setActionLoadingId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+
+
   const walletsById = useMemo(() => {
     return new Map(wallets.map((wallet) => [wallet.id, wallet]));
   }, [wallets]);
@@ -92,6 +99,10 @@ export default function Transactions() {
   const categoriesById = useMemo(() => {
     return new Map(categories.map((category) => [category.id, category]));
   }, [categories]);
+
+  const invoicesById = useMemo(() => {
+    return new Map(invoices.map((invoice) => [invoice.id, invoice]));
+  }, [invoices]);
 
   const totalAmount = useMemo(() => {
     return transactions
@@ -112,10 +123,17 @@ export default function Transactions() {
   }, [transactions]);
 
   async function loadPageData() {
+    console.log("[Transactions] loadPageData chamado", {
+      activeWorkspace,
+      activeWorkspaceId: activeWorkspace?.id,
+    });
+
     if (!activeWorkspace) {
+      console.log("[Transactions] Sem workspace ativo");
       setTransactions([]);
       setWallets([]);
       setCategories([]);
+      setInvoices([]);
       return;
     }
 
@@ -123,24 +141,40 @@ export default function Transactions() {
     setErrorMessage("");
 
     try {
-      const [transactionsData, walletsData, categoriesData] = await Promise.all([
-        listTransactions(activeWorkspace.id),
-        listWallets(activeWorkspace.id),
-        listCategories(activeWorkspace.id),
-      ]);
+      console.log("[Transactions] Buscando dados do workspace:", activeWorkspace.id);
+
+      const [transactionsData, walletsData, categoriesData, invoicesData] =
+        await Promise.all([
+          listTransactions(activeWorkspace.id),
+          listWallets(activeWorkspace.id),
+          listCategories(activeWorkspace.id),
+          listInvoices(activeWorkspace.id),
+        ]);
+
+      console.log("[Transactions] Dados retornados", {
+        transactionsData,
+        walletsData,
+        categoriesData,
+        invoicesData,
+      });
 
       setTransactions(transactionsData);
       setWallets(walletsData);
       setCategories(categoriesData);
+      setInvoices(invoicesData);
 
       if (!walletId && walletsData[0]) {
+        console.log("[Transactions] Setando primeira carteira", walletsData[0]);
         setWalletId(walletsData[0].id);
       }
 
       if (!categoryId && categoriesData[0]) {
+        console.log("[Transactions] Setando primeira categoria", categoriesData[0]);
         setCategoryId(categoriesData[0].id);
       }
     } catch (error) {
+      console.error("[Transactions] Erro no loadPageData", error);
+
       const message =
         error instanceof Error ? error.message : "Erro ao carregar transações.";
       setErrorMessage(message);
@@ -418,6 +452,9 @@ export default function Transactions() {
               const category = transaction.category_id
                 ? categoriesById.get(transaction.category_id)
                 : null;
+              const invoice = transaction.invoice_id
+                ? invoicesById.get(transaction.invoice_id)
+                : null;
 
               const isActionLoading = actionLoadingId === transaction.id;
               const isCancelled = transaction.status === "cancelled";
@@ -457,6 +494,10 @@ export default function Transactions() {
                     <span>
                       <Calendar size={14} />
                       {getStatusLabel(transaction.status)}
+                    </span>
+                    <span>
+                      <CreditCard size={14} />
+                      {invoice ? `${invoice.month}/${invoice.year}` : "Sem fatura"}
                     </span>
                   </div>
 
