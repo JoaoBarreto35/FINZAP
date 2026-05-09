@@ -15,10 +15,19 @@ import { listCategories } from "../../services/categories/categoryService";
 import { listInvoices } from "../../services/invoices/invoiceService";
 import { listTransactions } from "../../services/transactions/transactionService";
 import { listWallets } from "../../services/wallets/walletService";
-import type { Category, Invoice, Transaction, Wallet } from "../../types/finance";
+import type {
+  Category,
+  InstallmentGroup,
+  Invoice,
+  RecurringRule,
+  Transaction,
+  Wallet,
+} from "../../types/finance";
 import { formatCurrency } from "../../utils/formatCurrency";
 import { formatDate } from "../../utils/formatDate";
 import styles from "./styles.module.css";
+import { listInstallmentGroups } from "../../services/installments/installmentService";
+import { listRecurringRules } from "../../services/recurring/recurringService";
 
 type RankingItem = {
   id: string;
@@ -149,6 +158,9 @@ export default function Dashboard() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
 
+  const [installmentGroups, setInstallmentGroups] = useState<InstallmentGroup[]>([]);
+  const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -270,13 +282,73 @@ export default function Dashboard() {
   const lastTransactions = useMemo(() => {
     return transactions.slice(0, 6);
   }, [transactions]);
+  const activeInstallmentGroups = useMemo(() => {
+    return installmentGroups.filter((group) => group.status === "active");
+  }, [installmentGroups]);
 
+  const activeRecurringRules = useMemo(() => {
+    return recurringRules.filter((rule) => rule.active);
+  }, [recurringRules]);
+
+  const activeInstallmentsAmount = useMemo(() => {
+    return activeInstallmentGroups.reduce((sum, group) => {
+      return sum + Number(group.total_amount);
+    }, 0);
+  }, [activeInstallmentGroups]);
+
+  const monthlyRecurringAmount = useMemo(() => {
+    return activeRecurringRules.reduce((sum, rule) => {
+      return sum + Number(rule.amount);
+    }, 0);
+  }, [activeRecurringRules]);
+
+  const currentMonthTransactions = useMemo(() => {
+    const currentMonth = getCurrentMonth();
+    const currentYear = getCurrentYear();
+
+    return activeTransactions.filter((transaction) => {
+      const date = new Date(`${transaction.transaction_date}T00:00:00`);
+
+      return (
+        date.getMonth() + 1 === currentMonth &&
+        date.getFullYear() === currentYear
+      );
+    });
+  }, [activeTransactions]);
+
+  const currentMonthAmount = useMemo(() => {
+    return sumTransactions(currentMonthTransactions);
+  }, [currentMonthTransactions]);
+
+  const nextCommitments = useMemo(() => {
+    return transactions
+      .filter((transaction) => {
+        if (transaction.status === "cancelled") return false;
+        if (transaction.status === "paid") return false;
+
+        const date = new Date(`${transaction.transaction_date}T00:00:00`);
+        const today = new Date();
+
+        today.setHours(0, 0, 0, 0);
+
+        return date >= today;
+      })
+      .sort((a, b) => {
+        return (
+          new Date(`${a.transaction_date}T00:00:00`).getTime() -
+          new Date(`${b.transaction_date}T00:00:00`).getTime()
+        );
+      })
+      .slice(0, 5);
+  }, [transactions]);
   async function loadDashboard() {
     if (!activeWorkspace) {
       setTransactions([]);
       setWallets([]);
       setCategories([]);
       setInvoices([]);
+      setInstallmentGroups([]);
+      setRecurringRules([]);
       return;
     }
 
@@ -284,18 +356,28 @@ export default function Dashboard() {
     setErrorMessage("");
 
     try {
-      const [transactionsData, walletsData, categoriesData, invoicesData] =
-        await Promise.all([
-          listTransactions(activeWorkspace.id),
-          listWallets(activeWorkspace.id),
-          listCategories(activeWorkspace.id),
-          listInvoices(activeWorkspace.id),
-        ]);
+      const [
+        transactionsData,
+        walletsData,
+        categoriesData,
+        invoicesData,
+        installmentGroupsData,
+        recurringRulesData,
+      ] = await Promise.all([
+        listTransactions(activeWorkspace.id),
+        listWallets(activeWorkspace.id),
+        listCategories(activeWorkspace.id),
+        listInvoices(activeWorkspace.id),
+        listInstallmentGroups(activeWorkspace.id),
+        listRecurringRules(activeWorkspace.id),
+      ]);
 
       setTransactions(transactionsData);
       setWallets(walletsData);
       setCategories(categoriesData);
       setInvoices(invoicesData);
+      setInstallmentGroups(installmentGroupsData);
+      setRecurringRules(recurringRulesData);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro ao carregar dashboard.";
@@ -358,7 +440,45 @@ export default function Dashboard() {
 
       {!loading ? (
         <>
+          <div className={styles.productGrid}>
+            <Card>
+              <div className={styles.summaryHeader}>
+                <span>Gasto do mês</span>
+                <CalendarDays size={18} />
+              </div>
+              <strong>{formatCurrency(currentMonthAmount)}</strong>
+              <small>{currentMonthTransactions.length} transações neste mês</small>
+            </Card>
+
+            <Card>
+              <div className={styles.summaryHeader}>
+                <span>Fixos ativos</span>
+                <ReceiptText size={18} />
+              </div>
+              <strong>{activeRecurringRules.length}</strong>
+              <small>{formatCurrency(monthlyRecurringAmount)} previstos por mês</small>
+            </Card>
+
+            <Card>
+              <div className={styles.summaryHeader}>
+                <span>Parceladas ativas</span>
+                <CreditCard size={18} />
+              </div>
+              <strong>{activeInstallmentGroups.length}</strong>
+              <small>{formatCurrency(activeInstallmentsAmount)} parcelados</small>
+            </Card>
+
+            <Card>
+              <div className={styles.summaryHeader}>
+                <span>Em faturas abertas</span>
+                <WalletIcon size={18} />
+              </div>
+              <strong>{formatCurrency(openInvoicesAmount)}</strong>
+              <small>Abertas ou fechadas, ainda não pagas</small>
+            </Card>
+          </div>
           <div className={styles.summaryGrid}>
+
             <Card>
               <div className={styles.summaryHeader}>
                 <span>Total lançado</span>
@@ -486,6 +606,36 @@ export default function Dashboard() {
               </div>
             </Card>
           </div>
+          <Card>
+            <div className={styles.cardHeader}>
+              <div>
+                <h3>Atalhos rápidos</h3>
+                <p>Acesse as principais áreas financeiras do workspace.</p>
+              </div>
+            </div>
+
+            <div className={styles.quickActions}>
+              <Link to="/app/transactions">
+                Nova transação
+                <ArrowRight size={16} />
+              </Link>
+
+              <Link to="/app/invoices">
+                Ver faturas
+                <ArrowRight size={16} />
+              </Link>
+
+              <Link to="/app/installments">
+                Parceladas
+                <ArrowRight size={16} />
+              </Link>
+
+              <Link to="/app/recurring">
+                Fixos
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+          </Card>
 
           <div className={styles.secondaryGrid}>
             <Card>
@@ -534,7 +684,48 @@ export default function Dashboard() {
               </div>
             </Card>
           </div>
+          <Card>
+            <div className={styles.cardHeader}>
+              <div>
+                <h3>Próximos compromissos</h3>
+                <p>Transações futuras ou pendentes próximas.</p>
+              </div>
+            </div>
 
+            {nextCommitments.length === 0 ? (
+              <p className={styles.empty}>Nenhum compromisso futuro encontrado.</p>
+            ) : null}
+
+            <div className={styles.transactionList}>
+              {nextCommitments.map((transaction) => {
+                const wallet = transaction.wallet_id
+                  ? walletsById.get(transaction.wallet_id)
+                  : null;
+
+                const category = transaction.category_id
+                  ? categoriesById.get(transaction.category_id)
+                  : null;
+
+                return (
+                  <div key={transaction.id} className={styles.transactionItem}>
+                    <div>
+                      <strong>{transaction.description}</strong>
+                      <span>
+                        {formatDate(transaction.transaction_date)} ·{" "}
+                        {wallet?.name ?? "Sem carteira"} ·{" "}
+                        {category?.name ?? "Sem categoria"}
+                      </span>
+                    </div>
+
+                    <div className={styles.transactionRight}>
+                      <strong>{formatCurrency(Number(transaction.amount))}</strong>
+                      <span>{transaction.status}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
           <Card>
             <div className={styles.cardHeader}>
               <div>
