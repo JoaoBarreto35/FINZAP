@@ -182,3 +182,54 @@ export type CreateInstallmentPurchaseInput = {
   first_year: number;
   status?: TransactionStatus;
 };
+
+export type RecurringFrequency = "monthly";
+
+export type RecurringRule = {
+  id: string;
+  workspace_id: string;
+  wallet_id: string;
+  category_id: string | null;
+  created_by: string | null;
+  responsible_user_id: string | null;
+  description: string;
+  amount: number;
+  frequency: RecurringFrequency;
+  charge_day: number;
+  start_month: number;
+  start_year: number;
+  end_month: number | null;
+  end_year: number | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateRecurringRuleInput = {
+  workspace_id: string;
+  wallet_id: string;
+  category_id?: string | null;
+  responsible_user_id?: string | null;
+  description: string;
+  amount: number;
+  frequency?: RecurringFrequency;
+  charge_day: number;
+  start_month: number;
+  start_year: number;
+  end_month?: number | null;
+  end_year?: number | null;
+};
+
+export type UpdateRecurringRuleInput = {
+  wallet_id: string;
+  category_id?: string | null;
+  responsible_user_id?: string | null;
+  description: string;
+  amount: number;
+  charge_day: number;
+  start_month: number;
+  start_year: number;
+  end_month?: number | null;
+  end_year?: number | null;
+  active: boolean;
+};

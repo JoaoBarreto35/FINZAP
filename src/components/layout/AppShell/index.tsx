@@ -11,6 +11,7 @@ import {
   Users,
   Wallet,
   ListOrdered,
+  Repeat,
 } from "lucide-react";
 import { useAuth } from "../../../hooks/useAuth";
 import { useWorkspace } from "../../../hooks/useWorkspace";
@@ -31,6 +32,11 @@ const navItems = [
     label: "Parceladas",
     path: "/app/installments",
     icon: ListOrdered,
+  },
+  {
+    label: "Fixos",
+    path: "/app/recurring",
+    icon: Repeat,
   },
   {
     label: "Faturas",

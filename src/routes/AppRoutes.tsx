@@ -13,6 +13,7 @@ import WhatsAppSimulator from "../pages/WhatsAppSimulator";
 import WorkspaceSelect from "../pages/WorkspaceSelect";
 import Installments from "../pages/Installments";
 import { ProtectedRoute } from "./ProtectedRoute";
+import Recurring from '../pages/Recurring';
 
 export function AppRoutes() {
   return (
@@ -35,6 +36,7 @@ export function AppRoutes() {
           <Route path="members" element={<Members />} />
           <Route path="settings" element={<Settings />} />
           <Route path="whatsapp-simulator" element={<WhatsAppSimulator />} />
+          <Route path="recurring" element={<Recurring />} />
         </Route>
       </Route>
 
