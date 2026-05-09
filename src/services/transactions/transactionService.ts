@@ -1,5 +1,9 @@
 import { supabase } from "../supabase/client";
-import type { CreateTransactionInput, Transaction } from "../../types/finance";
+import type {
+  CreateTransactionInput,
+  Transaction,
+  UpdateTransactionInput,
+} from "../../types/finance";
 
 const transactionFields =
   "id, workspace_id, wallet_id, invoice_id, category_id, created_by, responsible_user_id, amount, description, transaction_date, transaction_type, status, source, installment_group_id, installment_number, installment_total, recurring_rule_id, created_at, updated_at";
@@ -45,6 +49,32 @@ export async function createTransaction(
 
   if (!data) {
     throw new Error("Não foi possível criar a transação.");
+  }
+
+  return data as Transaction;
+}
+
+export async function updateTransaction(
+  transactionId: string,
+  input: UpdateTransactionInput,
+): Promise<Transaction> {
+  const { data, error } = await supabase.rpc("update_transaction_with_invoice", {
+    p_transaction_id: transactionId,
+    p_wallet_id: input.wallet_id ?? null,
+    p_category_id: input.category_id ?? null,
+    p_responsible_user_id: input.responsible_user_id ?? null,
+    p_amount: input.amount,
+    p_description: input.description,
+    p_transaction_date: input.transaction_date,
+    p_status: input.status,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Não foi possível atualizar a transação.");
   }
 
   return data as Transaction;

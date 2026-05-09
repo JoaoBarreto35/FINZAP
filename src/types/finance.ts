@@ -139,3 +139,13 @@ export type UpdateCategoryInput = {
   color?: string | null;
   icon?: string | null;
 };
+
+export type UpdateTransactionInput = {
+  wallet_id?: string | null;
+  category_id?: string | null;
+  responsible_user_id?: string | null;
+  amount: number;
+  description: string;
+  transaction_date: string;
+  status: TransactionStatus;
+};

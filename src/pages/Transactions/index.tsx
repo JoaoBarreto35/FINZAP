@@ -9,6 +9,7 @@ import {
   ReceiptText,
   Trash2,
   Wallet as WalletIcon,
+  Edit3,
 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -20,6 +21,7 @@ import {
   createTransaction,
   listTransactions,
   markTransactionAsPaid,
+  updateTransaction,
 } from "../../services/transactions/transactionService";
 import { listInvoices } from "../../services/invoices/invoiceService";
 import { listWallets } from "../../services/wallets/walletService";
@@ -77,6 +79,7 @@ export default function Transactions() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -89,6 +92,8 @@ export default function Transactions() {
   const [submitting, setSubmitting] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+
+  const isEditing = Boolean(editingTransaction);
 
 
 
@@ -184,14 +189,39 @@ export default function Transactions() {
   }
 
   useEffect(() => {
-    loadPageData();
-  }, [activeWorkspace?.id]);
+    const timeoutId = window.setTimeout(() => {
+      void loadPageData();
+    }, 0);
 
-  async function handleCreateTransaction(event: FormEvent<HTMLFormElement>) {
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeWorkspace?.id]);
+  function resetForm() {
+    setEditingTransaction(null);
+    setDescription("");
+    setAmount("");
+    setTransactionDate(getTodayDate());
+    setWalletId(wallets[0]?.id ?? "");
+    setCategoryId(categories[0]?.id ?? "");
+    setStatus("pending");
+  }
+
+  function handleStartEdit(transaction: Transaction) {
+    setEditingTransaction(transaction);
+    setDescription(transaction.description);
+    setAmount(Number(transaction.amount).toFixed(2).replace(".", ","));
+    setTransactionDate(transaction.transaction_date);
+    setWalletId(transaction.wallet_id ?? "");
+    setCategoryId(transaction.category_id ?? "");
+    setStatus(transaction.status);
+    setErrorMessage("");
+  }
+  async function handleSubmitTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!activeWorkspace) {
-      setErrorMessage("Selecione um workspace antes de criar transações.");
+      setErrorMessage("Selecione um workspace antes de salvar transações.");
       return;
     }
 
@@ -211,29 +241,36 @@ export default function Transactions() {
     setErrorMessage("");
 
     try {
-      await createTransaction(
-        {
-          workspace_id: activeWorkspace.id,
+      if (editingTransaction) {
+        await updateTransaction(editingTransaction.id, {
           wallet_id: walletId || null,
           category_id: categoryId || null,
           amount: parsedAmount,
           description,
           transaction_date: transactionDate,
-          transaction_type: "single",
           status,
-        },
-        user.id,
-      );
+        });
+      } else {
+        await createTransaction(
+          {
+            workspace_id: activeWorkspace.id,
+            wallet_id: walletId || null,
+            category_id: categoryId || null,
+            amount: parsedAmount,
+            description,
+            transaction_date: transactionDate,
+            transaction_type: "single",
+            status,
+          },
+          user.id,
+        );
+      }
 
-      setDescription("");
-      setAmount("");
-      setTransactionDate(getTodayDate());
-      setStatus("pending");
-
+      resetForm();
       await loadPageData();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Erro ao criar transação.";
+        error instanceof Error ? error.message : "Erro ao salvar transação.";
       setErrorMessage(message);
     } finally {
       setSubmitting(false);
@@ -321,11 +358,15 @@ export default function Transactions() {
         <Card>
           <div className={styles.cardHeader}>
             <div>
-              <h3>Nova transação</h3>
-              <p>Crie um gasto avulso para o workspace atual.</p>
+              <h3>{isEditing ? "Editar transação" : "Nova transação"}</h3>
+              <p>
+                {isEditing
+                  ? "Altere os dados da transação selecionada."
+                  : "Crie um gasto avulso para o workspace atual."}
+              </p>
             </div>
 
-            <Plus size={20} />
+            {isEditing ? <Edit3 size={20} /> : <Plus size={20} />}
           </div>
 
           {wallets.length === 0 || categories.length === 0 ? (
@@ -335,7 +376,7 @@ export default function Transactions() {
             </p>
           ) : null}
 
-          <form className={styles.form} onSubmit={handleCreateTransaction}>
+          <form className={styles.form} onSubmit={handleSubmitTransaction}>
             <label>
               Descrição
               <input
@@ -418,12 +459,24 @@ export default function Transactions() {
               </select>
             </label>
 
-            <Button
-              type="submit"
-              disabled={submitting || wallets.length === 0 || categories.length === 0}
-            >
-              {submitting ? "Criando..." : "Criar transação"}
-            </Button>
+            <div className={styles.formActions}>
+              <Button
+                type="submit"
+                disabled={submitting || wallets.length === 0 || categories.length === 0}
+              >
+                {submitting
+                  ? "Salvando..."
+                  : isEditing
+                    ? "Salvar alterações"
+                    : "Criar transação"}
+              </Button>
+
+              {isEditing ? (
+                <Button type="button" variant="secondary" onClick={resetForm}>
+                  Cancelar edição
+                </Button>
+              ) : null}
+            </div>
           </form>
         </Card>
 
@@ -503,6 +556,15 @@ export default function Transactions() {
 
                   {!isCancelled ? (
                     <div className={styles.actions}>
+                      <button
+                        type="button"
+                        onClick={() => handleStartEdit(transaction)}
+                        disabled={isActionLoading}
+                      >
+                        <Edit3 size={16} />
+                        Editar
+                      </button>
+
                       {!isPaid ? (
                         <button
                           type="button"
