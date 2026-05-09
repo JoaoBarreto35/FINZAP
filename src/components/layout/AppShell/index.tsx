@@ -12,6 +12,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useAuth } from "../../../hooks/useAuth";
+import { useWorkspace } from "../../../hooks/useWorkspace";
 import styles from "./styles.module.css";
 
 const navItems = [
@@ -59,8 +60,10 @@ const navItems = [
 
 export function AppShell() {
   const { signOut, profile, user } = useAuth();
+  const { activeWorkspace } = useWorkspace();
 
   const displayName = profile?.name || user?.email || "Usuário";
+  const workspaceName = activeWorkspace?.name ?? "Selecione um workspace";
 
   return (
     <div className={styles.shell}>
@@ -79,10 +82,10 @@ export function AppShell() {
           <strong>{displayName}</strong>
         </div>
 
-        <div className={styles.workspaceBox}>
+        <NavLink to="/app/workspaces" className={styles.workspaceBox}>
           <span>Workspace ativo</span>
-          <strong>Selecione um workspace</strong>
-        </div>
+          <strong>{workspaceName}</strong>
+        </NavLink>
 
         <nav className={styles.nav}>
           {navItems.map((item) => {
@@ -113,7 +116,7 @@ export function AppShell() {
         <header className={styles.topbar}>
           <div>
             <span className={styles.eyebrow}>Controle financeiro colaborativo</span>
-            <h1>Olá, {displayName}</h1>
+            <h1>{workspaceName}</h1>
           </div>
 
           <NavLink to="/app/workspaces" className={styles.workspaceButton}>

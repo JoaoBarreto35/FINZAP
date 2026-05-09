@@ -69,11 +69,13 @@
 }
 
 .workspaceBox {
+  display: block;
   padding: 1rem;
   border-radius: 1rem;
   background: var(--color-primary-soft);
+  color: var(--color-text);
+  text-decoration: none;
 }
-
 .workspaceBox span {
   display: block;
   color: var(--color-muted);
@@ -173,6 +175,14 @@
 
 .userBox strong {
   display: block;
+  margin-top: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspaceBox strong {
+  display: block;
+  max-width: 100%;
   margin-top: 0.25rem;
   overflow: hidden;
   text-overflow: ellipsis;

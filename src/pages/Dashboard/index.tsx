@@ -1,4 +1,6 @@
+import { Link } from "react-router-dom";
 import { Card } from "../../components/ui/Card";
+import { useWorkspace } from "../../hooks/useWorkspace";
 import styles from "./styles.module.css";
 
 const cards = [
@@ -21,11 +23,37 @@ const cards = [
 ];
 
 export default function Dashboard() {
+  const { activeWorkspace, loading } = useWorkspace();
+
+  if (loading) {
+    return (
+      <Card>
+        <p>Carregando workspace...</p>
+      </Card>
+    );
+  }
+
+  if (!activeWorkspace) {
+    return (
+      <Card>
+        <h2>Nenhum workspace selecionado</h2>
+        <p>
+          Crie seu primeiro workspace para começar a controlar carteiras,
+          faturas e transações.
+        </p>
+
+        <Link className={styles.linkButton} to="/app/workspaces">
+          Criar workspace
+        </Link>
+      </Card>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <section>
         <h2>Dashboard</h2>
-        <p>Resumo financeiro consolidado do workspace ativo.</p>
+        <p>Resumo financeiro consolidado do workspace {activeWorkspace.name}.</p>
       </section>
 
       <div className={styles.grid}>

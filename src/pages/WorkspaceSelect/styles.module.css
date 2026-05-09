@@ -1,0 +1,139 @@
+.page {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.header p {
+  max-width: 680px;
+  margin: 0.4rem 0 0;
+  color: var(--color-muted);
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.cardHeader h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.cardHeader p {
+  margin: 0.35rem 0 0;
+  color: var(--color-muted);
+}
+
+.workspaceList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.workspaceItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-background);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspaceItem:hover {
+  border-color: var(--color-primary);
+}
+
+.workspaceItem strong {
+  display: block;
+}
+
+.workspaceItem span {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--color-muted);
+  font-size: 0.88rem;
+}
+
+.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+}
+
+.form label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 800;
+}
+
+.form input,
+.form textarea {
+  width: 100%;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.9rem;
+  background: var(--color-background);
+  color: var(--color-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.error {
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  color: #991b1b;
+  background: #fee2e2;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  }
+}

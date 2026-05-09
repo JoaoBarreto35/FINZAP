@@ -28,20 +28,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
 
   const refreshProfile = useCallback(async () => {
-    const { data } = await supabase.auth.getUser();
-
-    if (!data.user) {
+    if (!user) {
       setProfile(null);
       return;
     }
 
-    const currentProfile = await getMyProfile(data.user.id);
-    setProfile(currentProfile);
-  }, []);
+    try {
+      const currentProfile = await getMyProfile(user.id);
+      setProfile(currentProfile);
+    } catch (error) {
+      console.error("[AuthContext] Erro ao buscar profile:", error);
+      setProfile(null);
+    }
+  }, [user]);
 
   async function signIn(input: SignInInput) {
     await signInWithEmail(input);
-    await refreshProfile();
   }
 
   async function signUp(input: SignUpInput) {
@@ -59,57 +61,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let isMounted = true;
 
     async function loadSession() {
-      const { data, error } = await supabase.auth.getSession();
+      try {
+        const { data, error } = await supabase.auth.getSession();
 
-      if (!isMounted) return;
+        if (!isMounted) return;
 
-      if (error) {
-        console.error("Erro ao buscar sessão:", error.message);
-      }
+        if (error) {
+          console.error("[AuthContext] Erro no getSession:", error.message);
+        }
 
-      const currentSession = data.session;
-      const currentUser = currentSession?.user ?? null;
+        const currentSession = data.session;
+        const currentUser = currentSession?.user ?? null;
 
-      setSession(currentSession);
-      setUser(currentUser);
-
-      if (currentUser) {
-        try {
-          const currentProfile = await getMyProfile(currentUser.id);
-
-          if (isMounted) {
-            setProfile(currentProfile);
-          }
-        } catch (profileError) {
-          console.error("Erro ao buscar profile:", profileError);
+        setSession(currentSession);
+        setUser(currentUser);
+      } catch (error) {
+        console.error("[AuthContext] Erro inesperado ao carregar sessão:", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
         }
       }
-
-      setLoading(false);
     }
 
     loadSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
-
-      if (!currentSession?.user) {
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const currentProfile = await getMyProfile(currentSession.user.id);
-        setProfile(currentProfile);
-      } catch (profileError) {
-        console.error("Erro ao atualizar profile:", profileError);
-      } finally {
-        setLoading(false);
-      }
+      setLoading(false);
     });
 
     return () => {
@@ -117,6 +99,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadProfile() {
+      try {
+        const currentProfile = await getMyProfile(user.id);
+
+        if (isMounted) {
+          setProfile(currentProfile);
+        }
+      } catch (error) {
+        console.error("[AuthContext] Erro ao carregar profile:", error);
+
+        if (isMounted) {
+          setProfile(null);
+        }
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -129,7 +142,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       signOut,
       refreshProfile,
     }),
-    [user, session, profile, loading],
+    [user, session, profile, loading, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

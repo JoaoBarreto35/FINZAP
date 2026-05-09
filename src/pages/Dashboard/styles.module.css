@@ -41,3 +41,16 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+.linkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  margin-top: 1rem;
+  padding: 0 1rem;
+  border-radius: 0.9rem;
+  color: white;
+  background: var(--color-primary);
+  font-weight: 800;
+  text-decoration: none;
+}
