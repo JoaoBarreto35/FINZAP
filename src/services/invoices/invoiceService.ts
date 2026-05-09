@@ -42,12 +42,12 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<Invoice>
   return data;
 }
 
-export async function markInvoiceAsPaid(invoiceId: string): Promise<void> {
+export async function closeInvoice(invoiceId: string): Promise<void> {
   const { error } = await supabase
     .from("invoices")
     .update({
-      status: "paid",
-      paid_at: new Date().toISOString(),
+      status: "closed",
+      closed_at: new Date().toISOString(),
     })
     .eq("id", invoiceId);
 
@@ -56,12 +56,43 @@ export async function markInvoiceAsPaid(invoiceId: string): Promise<void> {
   }
 }
 
-export async function closeInvoice(invoiceId: string): Promise<void> {
+export async function reopenInvoice(invoiceId: string): Promise<void> {
   const { error } = await supabase
     .from("invoices")
     .update({
-      status: "closed",
-      closed_at: new Date().toISOString(),
+      status: "open",
+      closed_at: null,
+    })
+    .eq("id", invoiceId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function markInvoiceAsPaid(
+  invoiceId: string,
+  paidBy: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("invoices")
+    .update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      paid_by: paidBy,
+    })
+    .eq("id", invoiceId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function cancelInvoice(invoiceId: string): Promise<void> {
+  const { error } = await supabase
+    .from("invoices")
+    .update({
+      status: "cancelled",
     })
     .eq("id", invoiceId);
 
