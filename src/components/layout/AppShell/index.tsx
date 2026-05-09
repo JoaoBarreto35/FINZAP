@@ -58,7 +58,9 @@ const navItems = [
 ];
 
 export function AppShell() {
-  const { signOut } = useAuth();
+  const { signOut, profile, user } = useAuth();
+
+  const displayName = profile?.name || user?.email || "Usuário";
 
   return (
     <div className={styles.shell}>
@@ -70,6 +72,11 @@ export function AppShell() {
             <strong>FinZap</strong>
             <span>Workspaces</span>
           </div>
+        </div>
+
+        <div className={styles.userBox}>
+          <span>Logado como</span>
+          <strong>{displayName}</strong>
         </div>
 
         <div className={styles.workspaceBox}>
@@ -106,7 +113,7 @@ export function AppShell() {
         <header className={styles.topbar}>
           <div>
             <span className={styles.eyebrow}>Controle financeiro colaborativo</span>
-            <h1>FinZap Workspaces</h1>
+            <h1>Olá, {displayName}</h1>
           </div>
 
           <NavLink to="/app/workspaces" className={styles.workspaceButton}>
