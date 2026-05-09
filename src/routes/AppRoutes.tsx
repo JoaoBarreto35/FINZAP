@@ -11,6 +11,7 @@ import Transactions from "../pages/Transactions";
 import Wallets from "../pages/Wallets";
 import WhatsAppSimulator from "../pages/WhatsAppSimulator";
 import WorkspaceSelect from "../pages/WorkspaceSelect";
+import Installments from "../pages/Installments";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -27,6 +28,7 @@ export function AppRoutes() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="workspaces" element={<WorkspaceSelect />} />
           <Route path="transactions" element={<Transactions />} />
+          <Route path="installments" element={<Installments />} />
           <Route path="invoices" element={<Invoices />} />
           <Route path="wallets" element={<Wallets />} />
           <Route path="categories" element={<Categories />} />

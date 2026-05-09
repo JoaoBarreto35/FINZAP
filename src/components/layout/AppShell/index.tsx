@@ -10,6 +10,7 @@ import {
   Tags,
   Users,
   Wallet,
+  ListOrdered,
 } from "lucide-react";
 import { useAuth } from "../../../hooks/useAuth";
 import { useWorkspace } from "../../../hooks/useWorkspace";
@@ -25,6 +26,11 @@ const navItems = [
     label: "Transações",
     path: "/app/transactions",
     icon: BarChart3,
+  },
+  {
+    label: "Parceladas",
+    path: "/app/installments",
+    icon: ListOrdered,
   },
   {
     label: "Faturas",

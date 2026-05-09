@@ -149,3 +149,36 @@ export type UpdateTransactionInput = {
   transaction_date: string;
   status: TransactionStatus;
 };
+
+export type InstallmentGroupStatus = "active" | "cancelled" | "finished";
+
+export type InstallmentGroup = {
+  id: string;
+  workspace_id: string;
+  wallet_id: string;
+  category_id: string | null;
+  created_by: string | null;
+  responsible_user_id: string | null;
+  description: string;
+  total_amount: number;
+  installment_amount: number;
+  installments_count: number;
+  first_month: number;
+  first_year: number;
+  status: InstallmentGroupStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateInstallmentPurchaseInput = {
+  workspace_id: string;
+  wallet_id: string;
+  category_id?: string | null;
+  responsible_user_id?: string | null;
+  description: string;
+  total_amount: number;
+  installments_count: number;
+  first_month: number;
+  first_year: number;
+  status?: TransactionStatus;
+};
