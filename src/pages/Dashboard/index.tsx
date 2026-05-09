@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
+  CalendarDays,
   CreditCard,
   ReceiptText,
   Tag,
@@ -11,9 +12,10 @@ import {
 import { Card } from "../../components/ui/Card";
 import { useWorkspace } from "../../hooks/useWorkspace";
 import { listCategories } from "../../services/categories/categoryService";
+import { listInvoices } from "../../services/invoices/invoiceService";
 import { listTransactions } from "../../services/transactions/transactionService";
 import { listWallets } from "../../services/wallets/walletService";
-import type { Category, Transaction, Wallet } from "../../types/finance";
+import type { Category, Invoice, Transaction, Wallet } from "../../types/finance";
 import { formatCurrency } from "../../utils/formatCurrency";
 import { formatDate } from "../../utils/formatDate";
 import styles from "./styles.module.css";
@@ -24,11 +26,67 @@ type RankingItem = {
   amount: number;
 };
 
+type InvoiceWithTotal = Invoice & {
+  total: number;
+  walletName: string;
+};
+
+const monthNames = [
+  "",
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
 function sumTransactions(transactions: Transaction[]) {
-  return transactions.reduce(
-    (sum, transaction) => sum + Number(transaction.amount),
-    0,
-  );
+  return transactions.reduce((sum, transaction) => {
+    return sum + Number(transaction.amount);
+  }, 0);
+}
+
+function getCurrentMonth() {
+  return new Date().getMonth() + 1;
+}
+
+function getCurrentYear() {
+  return new Date().getFullYear();
+}
+
+function getNextMonthAndYear() {
+  const currentMonth = getCurrentMonth();
+  const currentYear = getCurrentYear();
+
+  if (currentMonth === 12) {
+    return {
+      month: 1,
+      year: currentYear + 1,
+    };
+  }
+
+  return {
+    month: currentMonth + 1,
+    year: currentYear,
+  };
+}
+
+function getInvoiceStatusLabel(status: Invoice["status"]) {
+  const labels: Record<Invoice["status"], string> = {
+    open: "Aberta",
+    closed: "Fechada",
+    paid: "Paga",
+    cancelled: "Cancelada",
+  };
+
+  return labels[status];
 }
 
 function buildCategoryRanking(
@@ -89,16 +147,13 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const activeTransactions = useMemo(() => {
     return transactions.filter((transaction) => transaction.status !== "cancelled");
-  }, [transactions]);
-
-  const cancelledTransactions = useMemo(() => {
-    return transactions.filter((transaction) => transaction.status === "cancelled");
   }, [transactions]);
 
   const pendingTransactions = useMemo(() => {
@@ -129,9 +184,80 @@ export default function Dashboard() {
     return sumTransactions(confirmedTransactions);
   }, [confirmedTransactions]);
 
-  const cancelledAmount = useMemo(() => {
-    return sumTransactions(cancelledTransactions);
-  }, [cancelledTransactions]);
+  const walletsById = useMemo(() => {
+    return new Map(wallets.map((wallet) => [wallet.id, wallet]));
+  }, [wallets]);
+
+  const categoriesById = useMemo(() => {
+    return new Map(categories.map((category) => [category.id, category]));
+  }, [categories]);
+
+  const invoiceTotalsById = useMemo(() => {
+    const totals = new Map<string, number>();
+
+    transactions.forEach((transaction) => {
+      if (!transaction.invoice_id) return;
+      if (transaction.status === "cancelled") return;
+
+      const current = totals.get(transaction.invoice_id) ?? 0;
+      totals.set(transaction.invoice_id, current + Number(transaction.amount));
+    });
+
+    return totals;
+  }, [transactions]);
+
+  const invoicesWithTotals = useMemo<InvoiceWithTotal[]>(() => {
+    return invoices.map((invoice) => {
+      const wallet = walletsById.get(invoice.wallet_id);
+
+      return {
+        ...invoice,
+        total: invoiceTotalsById.get(invoice.id) ?? 0,
+        walletName: wallet?.name ?? "Carteira removida",
+      };
+    });
+  }, [invoices, walletsById, invoiceTotalsById]);
+
+  const currentInvoice = useMemo(() => {
+    const currentMonth = getCurrentMonth();
+    const currentYear = getCurrentYear();
+
+    return (
+      invoicesWithTotals.find((invoice) => {
+        return (
+          invoice.month === currentMonth &&
+          invoice.year === currentYear &&
+          invoice.status !== "cancelled"
+        );
+      }) ?? null
+    );
+  }, [invoicesWithTotals]);
+
+  const nextInvoice = useMemo(() => {
+    const next = getNextMonthAndYear();
+
+    return (
+      invoicesWithTotals.find((invoice) => {
+        return (
+          invoice.month === next.month &&
+          invoice.year === next.year &&
+          invoice.status !== "cancelled"
+        );
+      }) ?? null
+    );
+  }, [invoicesWithTotals]);
+
+  const openInvoicesAmount = useMemo(() => {
+    return invoicesWithTotals
+      .filter((invoice) => invoice.status === "open" || invoice.status === "closed")
+      .reduce((sum, invoice) => sum + invoice.total, 0);
+  }, [invoicesWithTotals]);
+
+  const paidInvoicesAmount = useMemo(() => {
+    return invoicesWithTotals
+      .filter((invoice) => invoice.status === "paid")
+      .reduce((sum, invoice) => sum + invoice.total, 0);
+  }, [invoicesWithTotals]);
 
   const categoryRanking = useMemo(() => {
     return buildCategoryRanking(transactions, categories).slice(0, 5);
@@ -145,19 +271,12 @@ export default function Dashboard() {
     return transactions.slice(0, 6);
   }, [transactions]);
 
-  const walletsById = useMemo(() => {
-    return new Map(wallets.map((wallet) => [wallet.id, wallet]));
-  }, [wallets]);
-
-  const categoriesById = useMemo(() => {
-    return new Map(categories.map((category) => [category.id, category]));
-  }, [categories]);
-
   async function loadDashboard() {
     if (!activeWorkspace) {
       setTransactions([]);
       setWallets([]);
       setCategories([]);
+      setInvoices([]);
       return;
     }
 
@@ -165,15 +284,18 @@ export default function Dashboard() {
     setErrorMessage("");
 
     try {
-      const [transactionsData, walletsData, categoriesData] = await Promise.all([
-        listTransactions(activeWorkspace.id),
-        listWallets(activeWorkspace.id),
-        listCategories(activeWorkspace.id),
-      ]);
+      const [transactionsData, walletsData, categoriesData, invoicesData] =
+        await Promise.all([
+          listTransactions(activeWorkspace.id),
+          listWallets(activeWorkspace.id),
+          listCategories(activeWorkspace.id),
+          listInvoices(activeWorkspace.id),
+        ]);
 
       setTransactions(transactionsData);
       setWallets(walletsData);
       setCategories(categoriesData);
+      setInvoices(invoicesData);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro ao carregar dashboard.";
@@ -201,7 +323,7 @@ export default function Dashboard() {
         <h2>Nenhum workspace selecionado</h2>
         <p>
           Crie seu primeiro workspace para começar a controlar carteiras,
-          categorias e transações.
+          categorias, faturas e transações.
         </p>
 
         <Link className={styles.linkButton} to="/app/workspaces">
@@ -271,6 +393,97 @@ export default function Dashboard() {
               </div>
               <strong>{formatCurrency(paidAmount)}</strong>
               <small>{paidTransactions.length} transações pagas</small>
+            </Card>
+          </div>
+
+          <div className={styles.invoiceGrid}>
+            <Card>
+              <div className={styles.cardHeader}>
+                <div>
+                  <h3>Fatura atual</h3>
+                  <p>{monthNames[getCurrentMonth()]} de {getCurrentYear()}</p>
+                </div>
+
+                <CalendarDays size={20} />
+              </div>
+
+              {currentInvoice ? (
+                <div className={styles.invoiceHighlight}>
+                  <span>{currentInvoice.walletName}</span>
+                  <strong>{formatCurrency(currentInvoice.total)}</strong>
+                  <small>{getInvoiceStatusLabel(currentInvoice.status)}</small>
+                </div>
+              ) : (
+                <div className={styles.emptyState}>
+                  <p>Nenhuma fatura atual encontrada.</p>
+                  <Link className={styles.linkButton} to="/app/invoices">
+                    Criar fatura
+                  </Link>
+                </div>
+              )}
+            </Card>
+
+            <Card>
+              <div className={styles.cardHeader}>
+                <div>
+                  <h3>Próxima fatura</h3>
+                  <p>
+                    {monthNames[getNextMonthAndYear().month]} de{" "}
+                    {getNextMonthAndYear().year}
+                  </p>
+                </div>
+
+                <CreditCard size={20} />
+              </div>
+
+              {nextInvoice ? (
+                <div className={styles.invoiceHighlight}>
+                  <span>{nextInvoice.walletName}</span>
+                  <strong>{formatCurrency(nextInvoice.total)}</strong>
+                  <small>{getInvoiceStatusLabel(nextInvoice.status)}</small>
+                </div>
+              ) : (
+                <div className={styles.emptyState}>
+                  <p>Nenhuma próxima fatura encontrada.</p>
+                  <Link className={styles.linkButton} to="/app/invoices">
+                    Ver faturas
+                  </Link>
+                </div>
+              )}
+            </Card>
+
+            <Card>
+              <div className={styles.cardHeader}>
+                <div>
+                  <h3>Faturas abertas</h3>
+                  <p>Abertas ou fechadas, ainda não pagas.</p>
+                </div>
+
+                <ReceiptText size={20} />
+              </div>
+
+              <div className={styles.invoiceHighlight}>
+                <span>Total em aberto</span>
+                <strong>{formatCurrency(openInvoicesAmount)}</strong>
+                <small>Faturas não pagas</small>
+              </div>
+            </Card>
+
+            <Card>
+              <div className={styles.cardHeader}>
+                <div>
+                  <h3>Faturas pagas</h3>
+                  <p>Total já marcado como pago.</p>
+                </div>
+
+                <WalletIcon size={20} />
+              </div>
+
+              <div className={styles.invoiceHighlight}>
+                <span>Total pago</span>
+                <strong>{formatCurrency(paidInvoicesAmount)}</strong>
+                <small>Faturas finalizadas</small>
+              </div>
             </Card>
           </div>
 
@@ -373,12 +586,6 @@ export default function Dashboard() {
               })}
             </div>
           </Card>
-
-          {cancelledAmount > 0 ? (
-            <p className={styles.mutedInfo}>
-              Transações canceladas no histórico: {formatCurrency(cancelledAmount)}
-            </p>
-          ) : null}
         </>
       ) : null}
     </div>
